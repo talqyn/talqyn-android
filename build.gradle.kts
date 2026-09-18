@@ -49,11 +49,19 @@ subprojects {
             }
         }
 
-        // Signed only where a key is configured in `~/.gradle/gradle.properties`: a local
-        // `publishToMavenLocal` needs no key, and Central refuses an unsigned bundle anyway.
-        if (providers.gradleProperty("signing.gnupg.keyName").isPresent) {
+        // Signed only where a key is configured: a local `publishToMavenLocal` needs no key, and
+        // Central refuses an unsigned bundle anyway. The release workflow hands the armored key in
+        // as `ORG_GRADLE_PROJECT_signingKey`, since a CI runner has no keyring; a developer's machine
+        // names a key of its own keyring in `~/.gradle/gradle.properties`, so the key never leaves gpg.
+        val signingKey = providers.gradleProperty("signingKey")
+        val gpgKeyName = providers.gradleProperty("signing.gnupg.keyName")
+        if (signingKey.isPresent || gpgKeyName.isPresent) {
             extensions.configure<SigningExtension> {
-                useGpgCmd()
+                if (signingKey.isPresent) {
+                    useInMemoryPgpKeys(signingKey.get(), providers.gradleProperty("signingKeyPassword").get())
+                } else {
+                    useGpgCmd()
+                }
                 sign(publishing.publications)
             }
         }
