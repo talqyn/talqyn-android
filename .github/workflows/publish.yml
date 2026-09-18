@@ -1,0 +1,114 @@
+name: Publish
+
+# A version tag — `1.0.1` — publishes that version to Maven Central. Central never lets a
+# published version be replaced or removed, so the run tests first, refuses a tag that disagrees
+# with the version Gradle builds, and waits for an approval before it touches the signing key.
+on:
+  push:
+    tags:
+      - '[0-9]+.[0-9]+.[0-9]+'
+
+permissions:
+  contents: read
+
+# Two tags pushed together publish one after the other; an upload is never cancelled halfway.
+concurrency:
+  group: publish
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # The whole history, to tell whether the tagged commit is on main.
+          fetch-depth: 0
+
+      # A tag publishes the commit it points at, and the environment checks only the tag's name:
+      # a tag on a branch still under review would publish code nobody merged.
+      - name: The tagged commit is on main
+        run: |
+          if ! git merge-base --is-ancestor HEAD origin/main; then
+            echo "::error::Tag $GITHUB_REF_NAME points at a commit that is not on main"
+            exit 1
+          fi
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: gradle/actions/setup-gradle@v6
+
+      # The tag is what a release is known by, the Gradle version is what ends up in every
+      # request's `X-Talqyn-SDK` header: a tag that names another version publishes nothing.
+      - name: The tag names the version Gradle builds
+        run: |
+          version=$(./gradlew -q :talqyn-sdk:properties --property version | sed -n 's/^version: //p')
+          if [ "$version" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME, but build.gradle.kts builds $version"
+            exit 1
+          fi
+
+      - name: Unit tests and the sample's release build
+        run: ./gradlew test :sample:assembleRelease
+
+  publish:
+    needs: verify
+    runs-on: ubuntu-24.04
+    # The signing key and the Central token live in this environment only: it admits a version
+    # tag and nothing else, and holds the job until a reviewer approves it.
+    environment: maven-central
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: gradle/actions/setup-gradle@v6
+
+      # Built from scratch rather than from the build cache: this is the artifact that stays on
+      # Central for good.
+      - name: Signed bundle
+        env:
+          ORG_GRADLE_PROJECT_signingKey: ${{ secrets.SIGNING_KEY }}
+          ORG_GRADLE_PROJECT_signingKeyPassword: ${{ secrets.SIGNING_KEY_PASSWORD }}
+        run: |
+          ./gradlew publishAllPublicationsToBuildRepository --no-build-cache
+          if ! find build/maven -name '*.asc' | grep -q .; then
+            echo "::error::The bundle is not signed: is SIGNING_KEY set in the maven-central environment?"
+            exit 1
+          fi
+          cd build/maven && zip -qr ../bundle.zip com -x '*maven-metadata*'
+
+      # AUTOMATIC: the approval above is the one human gate; Central publishes what passes its
+      # validation and rejects the whole deployment otherwise, so a failure publishes nothing.
+      - name: Upload to Maven Central and wait until it is published
+        env:
+          CENTRAL_TOKEN_USERNAME: ${{ secrets.CENTRAL_TOKEN_USERNAME }}
+          CENTRAL_TOKEN_PASSWORD: ${{ secrets.CENTRAL_TOKEN_PASSWORD }}
+        run: |
+          auth="Authorization: Bearer $(printf '%s:%s' "$CENTRAL_TOKEN_USERNAME" "$CENTRAL_TOKEN_PASSWORD" | base64 -w0)"
+          api=https://central.sonatype.com/api/v1/publisher
+          id=$(curl --fail-with-body -sS -H "$auth" -F bundle=@build/bundle.zip \
+            "$api/upload?publishingType=AUTOMATIC&name=talqyn-android-$GITHUB_REF_NAME")
+          echo "Deployment $id"
+          state=UNKNOWN
+          for _ in $(seq 1 80); do
+            sleep 60
+            # A status request that fails is retried: the deployment goes on on Central regardless.
+            status=$(curl --fail-with-body -sS -X POST -H "$auth" "$api/status?id=$id") || continue
+            state=$(jq -r .deploymentState <<<"$status")
+            echo "$state"
+            case "$state" in
+              PUBLISHED) exit 0 ;;
+              FAILED) jq .errors <<<"$status"; exit 1 ;;
+            esac
+          done
+          echo "::error::Deployment $id is still $state; see central.sonatype.com"
+          exit 1
