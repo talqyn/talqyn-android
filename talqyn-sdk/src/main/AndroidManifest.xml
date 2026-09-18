@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- The SDK talks to Talqyn over the network; the permission merges into the app's manifest,
+         so an app that has no network of its own does not fail every request with a SecurityException. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+</manifest>
