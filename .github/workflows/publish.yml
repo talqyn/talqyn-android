@@ -22,6 +22,18 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
+        with:
+          # The whole history, to tell whether the tagged commit is on main.
+          fetch-depth: 0
+
+      # A tag publishes the commit it points at, and the environment checks only the tag's name:
+      # a tag on a branch still under review would publish code nobody merged.
+      - name: The tagged commit is on main
+        run: |
+          if ! git merge-base --is-ancestor HEAD origin/main; then
+            echo "::error::Tag $GITHUB_REF_NAME points at a commit that is not on main"
+            exit 1
+          fi
 
       - uses: actions/setup-java@v6
         with:
