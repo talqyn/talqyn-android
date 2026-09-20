@@ -11,6 +11,8 @@ import org.junit.Test
 class ApiRequestTest {
     private val emptySearch = """{"search_id":"s","query":"x","locale":"ru","total":0,"results":[]}"""
     private val emptyListing = """{"query":"x","locale":"ru","offset":0,"limit":20,"sort":"relevance","total":0,"results":[]}"""
+    private val emptyStart =
+        """{"search_id":"s","locale":"ru","history":[],"popular_queries":[],"categories":[],"products":[]}"""
 
     @Test
     fun everyRequestCarriesTheTokenAndARequestId() = runBlocking {
@@ -54,6 +56,39 @@ class ApiRequestTest {
         assertEquals(listOf("/v1/search/", "/v1/search/full", "/v1/search/filters"), transport.sent.map { it.path })
         assertEquals("iphone", transport.sent[0].bodyJson["query"])
         assertEquals("price_asc", transport.sent[1].bodyJson["sort"])
+    }
+
+    @Test
+    fun startScreenPathAndDefaults() = runBlocking {
+        val transport = StubTransport()
+        transport.enqueue(emptyStart)
+
+        val talqyn = TestFixtures.preparedClient(transport, cityId = "10")
+        talqyn.setLocale(TalqynLocale.Kk)
+        talqyn.setVariant("exp-b")
+        talqyn.search.start()
+
+        val sent = transport.sent[0]
+        assertEquals("/v1/search/start", sent.path)
+        assertEquals("kk", sent.bodyJson["locale"])
+        assertEquals("10", sent.bodyJson["city_id"])
+        assertEquals("exp-b", sent.bodyJson["variant"])
+        assertEquals(10L, sent.bodyJson["limit"])
+        assertNull(sent.bodyJson["query"])
+    }
+
+    @Test
+    fun startScreenTakesAnExplicitLimitAndPlace() = runBlocking {
+        val transport = StubTransport()
+        transport.enqueue(emptyStart)
+
+        val talqyn = TestFixtures.preparedClient(transport, cityId = "10")
+        talqyn.search.start(TalqynStartQuery(limit = 8, locationId = "5"))
+
+        assertEquals(8L, transport.sent[0].bodyJson["limit"])
+        assertEquals("5", transport.sent[0].bodyJson["location_id"])
+        // A store beats a city: the default city must not tag along with an explicit store.
+        assertNull(transport.sent[0].bodyJson["city_id"])
     }
 
     @Test

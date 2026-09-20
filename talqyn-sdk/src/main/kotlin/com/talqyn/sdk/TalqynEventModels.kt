@@ -10,6 +10,16 @@ public enum class TalqynEventSource(public val wireValue: String) {
 
     /** The consultant's results. Not valid for [TalqynSearchSubmitEvent.source]. */
     Consultant("cip"),
+
+    /**
+     * The start screen of an empty search field — [TalqynSearchApi.start]. Not valid for
+     * [TalqynSearchSubmitEvent.source]: the screen has no query to submit.
+     *
+     * A tap here is counted apart from the rest on purpose. The screen's own products come
+     * from the most-clicked list, so feeding these clicks back would let it rank itself;
+     * they stay out of search ranking entirely.
+     */
+    Start("start"),
 }
 
 /**

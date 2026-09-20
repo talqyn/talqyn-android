@@ -66,6 +66,52 @@ class DecodingTest {
     }
 
     @Test
+    fun startScreenResponse() {
+        val response = TalqynStartResponse.decode(
+            json(
+                """
+                {
+                  "search_id": "0d3c1b2a-0000-4000-8000-000000000000",
+                  "locale": "ru",
+                  "history": ["sony headphones", "iphone 15 case"],
+                  "popular_queries": ["iphone 15", "tv", "robot vacuum"],
+                  "categories": [{"id": 12, "name": "Phones and gadgets", "slug": "smartfony-i-gadzhety", "path": "smartfony_i_gadzhety", "parent_name": null}],
+                  "products": [{
+                    "talqyn_id": 1234, "external_id": "256073",
+                    "title": "Apple iPhone 15 128GB", "price": 449990, "in_stock": true,
+                    "image_url": "https://cdn.example.com/1.jpg", "url": "https://shop.example.com/p/1",
+                    "score": null
+                  }]
+                }
+                """,
+            ),
+        )
+
+        assertEquals("0d3c1b2a-0000-4000-8000-000000000000", response.searchId)
+        assertEquals("ru", response.locale)
+        assertEquals(listOf("sony headphones", "iphone 15 case"), response.history)
+        assertEquals(listOf("iphone 15", "tv", "robot vacuum"), response.popularQueries)
+        assertEquals(12, response.categories.first().id)
+        assertNull(response.categories.first().parentName)
+
+        val product = response.products.first()
+        assertEquals(1234, product.talqynId)
+        assertEquals("256073", product.externalId)
+        // Popularity, not relevance: the screen ranks by clicks, so a card carries no score.
+        assertNull(product.score)
+    }
+
+    /** Four independent blocks: a server that omits one is not a broken response. */
+    @Test
+    fun emptyStartScreenReadsAsEmptyBlocks() {
+        val response = TalqynStartResponse.decode(json("""{"search_id": "s", "locale": "kk"}"""))
+        assertEquals(emptyList<String>(), response.history)
+        assertEquals(emptyList<String>(), response.popularQueries)
+        assertEquals(emptyList<TalqynCategory>(), response.categories)
+        assertEquals(emptyList<TalqynProduct>(), response.products)
+    }
+
+    @Test
     fun productAcceptsLegacyProductIdAlias() {
         val product = TalqynProduct.decode(json("""{"product_id": 55, "title": "x"}"""))
         assertEquals(55, product.talqynId)
