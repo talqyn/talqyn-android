@@ -33,7 +33,7 @@ alone if all you need is search — see [Installation](#installation).
 
 ```kotlin
 // build.gradle.kts of the app's module
-implementation("com.talqyn:talqyn-ui:1.0.0")
+implementation("com.talqyn:talqyn-ui:1.1.0")
 ```
 
 **2. Make one client for the whole app** and warm it up at launch, so the first
@@ -94,9 +94,9 @@ among its repositories.
 ```kotlin
 // build.gradle.kts of the app's module
 dependencies {
-    implementation("com.talqyn:talqyn-sdk:1.0.0")
-    implementation("com.talqyn:talqyn-consultant-core:1.0.0") // a consultant screen of your own
-    implementation("com.talqyn:talqyn-ui:1.0.0")              // the ready-made screen; the core comes with it
+    implementation("com.talqyn:talqyn-sdk:1.1.0")
+    implementation("com.talqyn:talqyn-consultant-core:1.1.0") // a consultant screen of your own
+    implementation("com.talqyn:talqyn-ui:1.1.0")              // the ready-made screen; the core comes with it
 }
 ```
 
