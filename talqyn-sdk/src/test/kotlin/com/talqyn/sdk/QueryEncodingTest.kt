@@ -34,6 +34,25 @@ class QueryEncodingTest {
         assertNull(json["price_max"])
     }
 
+    @Test
+    fun startQueryUsesContractFieldNamesAndCarriesNoQuery() {
+        val json = encode(
+            TalqynStartQuery(locale = TalqynLocale.Kk, limit = 8, cityId = "10", variant = "b").toJson(),
+        )
+        assertEquals("kk", json["locale"])
+        assertEquals(8L, json["limit"])
+        assertEquals("10", json["city_id"])
+        assertEquals("b", json["variant"])
+        // Not search(""): the endpoint takes no query, and an empty one is a 422 on instant search.
+        assertNull(json["query"])
+        assertNull(json["location_id"])
+    }
+
+    @Test
+    fun startQueryDefaultsToTenProducts() {
+        assertEquals("""{"limit":10}""", TalqynJson.encode(TalqynStartQuery().toJson()))
+    }
+
     /** A whole price goes out without a fraction, and a fractional one keeps it. */
     @Test
     fun pricesAreWrittenAsTheContractReadsThem() {

@@ -50,6 +50,44 @@ public data class TalqynSearchQuery(
 }
 
 /**
+ * A request for the start screen (`POST /v1/search/start`): what to show under an
+ * **empty** search field.
+ *
+ * There is no `query` property, and that is the point — an empty query is not a query.
+ * It has neither a vector nor a prefix, so ranking, completions, and correction are all
+ * off, and the response carries popularity rather than relevance. Hence its own endpoint
+ * and its own request.
+ *
+ * Fields left `null` are filled from [TalqynConfiguration] — locale, place, and A/B bucket.
+ *
+ * @property locale The language to build the screen in. `null` uses the client default.
+ * @property limit How many products to return. 1–50. Applies to
+ *   [TalqynStartResponse.products] only: the other blocks are fixed in size by the
+ *   server — 5 past queries, 8 popular ones, 8 categories.
+ * @property cityId The shopper's city — the `id` of an option in the `city` group of
+ *   [TalqynSearchApi.filters]. Products unavailable there are left out of the block
+ *   rather than shown as out of stock.
+ * @property locationId The shopper's store — the `id` of an option in the `location`
+ *   group. Takes precedence over [cityId].
+ * @property variant The storefront's A/B bucket: echoed into analytics, no effect on the screen.
+ */
+public data class TalqynStartQuery(
+    val locale: TalqynLocale? = null,
+    val limit: Int = 10,
+    val cityId: String? = null,
+    val locationId: String? = null,
+    val variant: String? = null,
+) {
+    internal fun toJson(): Map<String, Any?> = jsonObject {
+        putIfNotNull("locale", locale?.wireValue)
+        put("limit", limit)
+        putIfNotNull("city_id", cityId)
+        putIfNotNull("location_id", locationId)
+        putIfNotNull("variant", variant)
+    }
+}
+
+/**
  * The selection criteria shared by a listing and its filter panel.
  *
  * They are shared on the server too: `/v1/search/full` and `/v1/search/filters` accept

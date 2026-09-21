@@ -9,7 +9,7 @@ plugins {
 // from a repository or from this directory through `includeBuild("../talqyn-android")`.
 subprojects {
     group = "com.talqyn"
-    version = "1.0.0"
+    version = "1.1.0"
 
     // What Maven Central requires of every artifact and is the same for all three modules; the
     // name and the description stay in each module's own `pom {}`.

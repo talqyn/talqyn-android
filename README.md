@@ -33,7 +33,7 @@ alone if all you need is search — see [Installation](#installation).
 
 ```kotlin
 // build.gradle.kts of the app's module
-implementation("com.talqyn:talqyn-ui:1.0.0")
+implementation("com.talqyn:talqyn-ui:1.1.0")
 ```
 
 **2. Make one client for the whole app** and warm it up at launch, so the first
@@ -94,9 +94,9 @@ among its repositories.
 ```kotlin
 // build.gradle.kts of the app's module
 dependencies {
-    implementation("com.talqyn:talqyn-sdk:1.0.0")
-    implementation("com.talqyn:talqyn-consultant-core:1.0.0") // a consultant screen of your own
-    implementation("com.talqyn:talqyn-ui:1.0.0")              // the ready-made screen; the core comes with it
+    implementation("com.talqyn:talqyn-sdk:1.1.0")
+    implementation("com.talqyn:talqyn-consultant-core:1.1.0") // a consultant screen of your own
+    implementation("com.talqyn:talqyn-ui:1.1.0")              // the ready-made screen; the core comes with it
 }
 ```
 
@@ -163,6 +163,14 @@ found.history        // the shopper's past queries (needs events, see below)
 found.correctedFrom  // set if the server quietly searched for corrected text
 found.searchId       // travels into the click event
 
+// The start screen — what to show when the field is focused and empty.
+val start = talqyn.search.start(TalqynStartQuery(limit = 8))
+start.history         // this shopper's recent queries (needs events, see below)
+start.popularQueries  // what the storefront searches for
+start.categories      // root categories of the catalog
+start.products        // popular products, ranked by clicks — no score, no relevance
+start.searchId        // travels into the click event, with source Start
+
 // A listing with filters and sorting, a page at a time.
 val query = TalqynFullSearchQuery(
     query = "smartphone",
@@ -180,6 +188,11 @@ panel.cityGroup          // the city picker: option.id goes into cityId
 panel.locationGroup      // the store picker: option.id goes into locationId
 panel.selectedFilters    // what is selected now, in the shape of the next request
 ```
+
+Call `start` when the field takes focus, not on every recomposition: each call is
+billed as a search. Report a tap on one of its cards with
+`source = TalqynEventSource.Start` — those clicks are kept out of search ranking, so
+that the screen cannot rank itself.
 
 `talqynId` is Talqyn's internal id and does not exist in your catalog. Everything
 you do on your side, do by `externalId` — it is optional, and whether to show a
@@ -332,9 +345,12 @@ on these three events:
 
 | Event | Report it when | Carries |
 |---|---|---|
-| `TalqynSearchSubmitEvent` | the shopper submits a query — the keyboard's search key, or opening a listing | the query, `source` (`Instant` or `Full`, never `Consultant`), `resultsCount` when it is known |
+| `TalqynSearchSubmitEvent` | the shopper submits a query — the keyboard's search key, a query picked on the start screen, or opening a listing | the query, `source` (`Instant` or `Full`, never `Consultant` or `Start`), `resultsCount` when it is known |
 | `TalqynProductClickEvent` | a product card is tapped in your own search UI | the `searchId` of the results it was shown in, `talqynId` (not your SKU), the zero-based `position`, the `source` |
-| `TalqynCategoryClickEvent` | a category from `found.categories` is tapped | the category id and the query it was shown for |
+| `TalqynCategoryClickEvent` | a category from `found.categories` or `start.categories` is tapped | the category id and the query it was shown for — none on the start screen |
+
+A query picked on the start screen is submitted like a typed one, with the source
+of the results it opens.
 
 ```kotlin
 talqyn.events.track(TalqynSearchSubmitEvent(
@@ -351,6 +367,9 @@ Where the `searchId` comes from:
 - **Instant search** — `found.searchId`, one per response.
 - **A listing** — `listing.searchId`, on the **first** page only: later pages
   continue the same results, so keep the id for the whole listing.
+- **The start screen** — `start.searchId`, with `source = TalqynEventSource.Start`.
+  These clicks are kept out of search ranking: the screen's products are the
+  most-clicked ones, so counting them there would let it rank itself.
 - **The consultant** — the `searchId` of the turn's `Products`, with
   `source = TalqynEventSource.Consultant` and `position` counted across all of the
   turn's products.

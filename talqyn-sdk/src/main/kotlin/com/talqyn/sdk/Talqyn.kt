@@ -72,7 +72,7 @@ public class Talqyn private constructor(
 
     private val authorizer: TalqynDeviceTokenAuthorizer
 
-    /** Instant search, listings, and the filter panel. */
+    /** Instant search, the start screen, listings, and the filter panel. */
     public val search: TalqynSearchApi
 
     /** The consultant and the shopper's chat history. */

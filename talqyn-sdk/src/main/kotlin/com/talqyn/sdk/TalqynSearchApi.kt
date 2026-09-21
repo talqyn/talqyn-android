@@ -15,7 +15,7 @@ public data class TalqynListingWithFilters(
 )
 
 /**
- * Instant search, listings, and the filter panel.
+ * Instant search, the start screen, listings, and the filter panel.
  *
  * Requires the `search` scope, which every device token carries. Reached through
  * [Talqyn.search]. Every request inherits the client's defaults — locale, place, A/B
@@ -51,6 +51,32 @@ public class TalqynSearchApi internal constructor(
      */
     public suspend fun search(text: String, limit: Int = 20): TalqynSearchResponse =
         search(TalqynSearchQuery(query = text, limit = limit))
+
+    /**
+     * Fetches the start screen of an empty search field: `POST /v1/search/start`.
+     *
+     * What to show when the shopper focuses the field and has typed nothing: their recent
+     * queries, what the storefront searches for, the catalog's root categories, and popular
+     * products. This is not `search("")` — an empty query has no vector and no prefix, so
+     * ranking, completions, and correction are all off, and the answer carries popularity
+     * instead of relevance.
+     *
+     * Report card taps through [TalqynEventsApi.productClick] with
+     * [TalqynEventSource.Start] and the response's [TalqynStartResponse.searchId], the way
+     * you would for search results.
+     *
+     * Each call is billed as a search, so call it when the field takes focus rather than on
+     * every recomposition.
+     *
+     * @param query How many products to return and where the shopper is. Everything is optional.
+     * @throws TalqynException Commonly [TalqynException.RateLimited] when the search bucket
+     *   is exhausted.
+     */
+    public suspend fun start(query: TalqynStartQuery = TalqynStartQuery()): TalqynStartResponse {
+        return client.send(path = "search/start", body = defaults.apply(query).toJson()) {
+            TalqynStartResponse.decode(it.asJsonObject())
+        }
+    }
 
     /**
      * Fetches one page of a listing: `POST /v1/search/full`. Advance through pages with

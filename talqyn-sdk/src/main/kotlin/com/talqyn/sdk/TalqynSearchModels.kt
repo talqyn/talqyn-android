@@ -41,7 +41,7 @@ public data class TalqynChip(
 }
 
 /**
- * A category in the navigation block of a search response.
+ * A category to navigate to — from a search response or the start screen.
  *
  * @property id The category id, as accepted by the `categoryId` request parameter.
  * @property name The category name in the requested locale.
@@ -144,6 +144,51 @@ public data class TalqynSearchResponse(
             brands = json.objects("brands", TalqynBrand::decode),
             history = json.strings("history"),
             correctedFrom = json.string("corrected_from"),
+        )
+    }
+}
+
+/**
+ * The result of `POST /v1/search/start` — what to show under an **empty** search field.
+ *
+ * Four independent blocks; any of them can come back empty. Only [products] is ranked at
+ * all, and by popularity rather than relevance, which is why its cards carry no
+ * [TalqynProduct.score].
+ *
+ * @property searchId The impression id for this screen. Send it back in
+ *   [TalqynProductClickEvent.searchId] with [TalqynEventSource.Start]: without it a card
+ *   tap has no denominator and the screen's click-through cannot be computed.
+ * @property locale The locale the screen was built in, as its wire value.
+ * @property history This shopper's recent queries, most recently used first. Empty until
+ *   the token names a shopper — not under [TalqynDeviceIdentity.Guest] — and the
+ *   storefront reports submitted queries through [TalqynEventsApi.searchSubmit]: the
+ *   block is assembled from those very events.
+ * @property popularQueries What this storefront searches for, over the last 30 days. A
+ *   freshly connected storefront has no traffic yet, so the block stands on the curated
+ *   corpus until it does.
+ * @property categories Root categories carrying live products, the largest first. Stock
+ *   and place are not applied here — the listing behind a tap applies them itself.
+ * @property products Popular products, by clicks over the last 30 days; a storefront
+ *   without clicks yet falls back to reviews and ratings. Only products in stock where the
+ *   shopper is — the city or store of the request, anywhere when it named neither.
+ */
+public data class TalqynStartResponse(
+    val searchId: String,
+    val locale: String,
+    val history: List<String>,
+    val popularQueries: List<String>,
+    val categories: List<TalqynCategory>,
+    val products: List<TalqynProduct>,
+) {
+    internal companion object {
+        /** Tolerates absent fields. A card that does not decode is dropped on its own; the rest of the block stays. */
+        fun decode(json: JsonObject): TalqynStartResponse = TalqynStartResponse(
+            searchId = json.string("search_id") ?: "",
+            locale = json.string("locale") ?: TalqynLocale.En.wireValue,
+            history = json.strings("history"),
+            popularQueries = json.strings("popular_queries"),
+            categories = json.objects("categories", TalqynCategory::decode),
+            products = json.objects("products", TalqynProduct::decode),
         )
     }
 }

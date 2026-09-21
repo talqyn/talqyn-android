@@ -44,6 +44,16 @@ internal class TalqynDefaults(configuration: TalqynConfiguration) {
         )
     }
 
+    fun apply(query: TalqynStartQuery, defaults: Snapshot = current): TalqynStartQuery {
+        val namesPlace = query.cityId != null || query.locationId != null
+        return query.copy(
+            locale = query.locale ?: defaults.locale,
+            variant = query.variant ?: defaults.variant,
+            cityId = if (namesPlace) query.cityId else defaults.cityId,
+            locationId = if (namesPlace) query.locationId else defaults.locationId,
+        )
+    }
+
     fun apply(criteria: TalqynFilterCriteria, defaults: Snapshot = current): TalqynFilterCriteria {
         val namesPlace = criteria.cityId != null || criteria.locationId != null
         return criteria.copy(
