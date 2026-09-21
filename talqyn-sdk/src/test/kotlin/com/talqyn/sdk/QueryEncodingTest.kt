@@ -43,7 +43,7 @@ class QueryEncodingTest {
         assertEquals(8L, json["limit"])
         assertEquals("10", json["city_id"])
         assertEquals("b", json["variant"])
-        // An empty query is not a query: the endpoint has no such field, and sending one would be a 422.
+        // Not search(""): the endpoint takes no query, and an empty one is a 422 on instant search.
         assertNull(json["query"])
         assertNull(json["location_id"])
     }

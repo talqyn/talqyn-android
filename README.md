@@ -345,9 +345,12 @@ on these three events:
 
 | Event | Report it when | Carries |
 |---|---|---|
-| `TalqynSearchSubmitEvent` | the shopper submits a query — the keyboard's search key, or opening a listing | the query, `source` (`Instant` or `Full`, never `Consultant`), `resultsCount` when it is known |
+| `TalqynSearchSubmitEvent` | the shopper submits a query — the keyboard's search key, a query picked on the start screen, or opening a listing | the query, `source` (`Instant` or `Full`, never `Consultant` or `Start`), `resultsCount` when it is known |
 | `TalqynProductClickEvent` | a product card is tapped in your own search UI | the `searchId` of the results it was shown in, `talqynId` (not your SKU), the zero-based `position`, the `source` |
-| `TalqynCategoryClickEvent` | a category from `found.categories` is tapped | the category id and the query it was shown for |
+| `TalqynCategoryClickEvent` | a category from `found.categories` or `start.categories` is tapped | the category id and the query it was shown for — none on the start screen |
+
+A query picked on the start screen is submitted like a typed one, with the source
+of the results it opens.
 
 ```kotlin
 talqyn.events.track(TalqynSearchSubmitEvent(

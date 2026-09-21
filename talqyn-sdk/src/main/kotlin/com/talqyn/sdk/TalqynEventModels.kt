@@ -26,9 +26,10 @@ public enum class TalqynEventSource(public val wireValue: String) {
  * A shopper tapped a product card.
  *
  * @property searchId The impression the click belongs to — [TalqynSearchResponse.searchId],
- *   [TalqynFullSearchResponse.searchId], or [TalqynConsultantProducts.searchId]. Without it
- *   a click has no denominator and click-through cannot be computed. A click from deep
- *   pagination legitimately arrives without one, since only the first page carries an id.
+ *   [TalqynFullSearchResponse.searchId], [TalqynStartResponse.searchId], or
+ *   [TalqynConsultantProducts.searchId]. Without it a click has no denominator and
+ *   click-through cannot be computed. A click from deep pagination legitimately arrives
+ *   without one, since only the first page carries an id.
  * @property talqynId Talqyn's internal product id — [TalqynProduct.talqynId], not your SKU.
  * @property position The zero-based position in the results. For the consultant this is
  *   the index in the turn's flattened product list, exactly as the storefront rendered it.
@@ -54,13 +55,14 @@ public data class TalqynProductClickEvent(
 /**
  * A shopper submitted a search query.
  *
- * Not optional analytics: the `history` block of an instant-search response is
- * assembled from these rows. A storefront running on a device token has to report
+ * Not optional analytics: the `history` blocks of instant search and of the start screen
+ * are assembled from these rows. A storefront running on a device token has to report
  * them itself — by definition there is no backend of yours in the chain to do it.
  *
  * @property query The query as submitted. 1–500 characters.
  * @property source Where it was submitted from. Only [TalqynEventSource.Instant] and
- *   [TalqynEventSource.Full] are accepted.
+ *   [TalqynEventSource.Full] are accepted: a query picked on the start screen takes the
+ *   source of the results it opens.
  * @property locale The language searched in. Filled from the client default when `null`.
  * @property resultsCount How many results came back, if known.
  * @property variant The storefront's A/B bucket. Filled from the client default when `null`.
@@ -82,10 +84,12 @@ public data class TalqynSearchSubmitEvent(
 }
 
 /**
- * A shopper tapped a category in the navigation block of a search response.
+ * A shopper tapped a category — in a search response's navigation block or on the start
+ * screen.
  *
  * @property categoryId The category tapped — [TalqynCategory.id].
- * @property query The query whose results the category appeared in.
+ * @property query The query whose results the category appeared in. `null` on the start
+ *   screen, which has no query.
  * @property variant The storefront's A/B bucket. Filled from the client default when `null`.
  */
 public data class TalqynCategoryClickEvent(

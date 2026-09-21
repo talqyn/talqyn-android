@@ -41,7 +41,7 @@ public data class TalqynChip(
 }
 
 /**
- * A category in the navigation block of a search response.
+ * A category to navigate to — from a search response or the start screen.
  *
  * @property id The category id, as accepted by the `categoryId` request parameter.
  * @property name The category name in the requested locale.

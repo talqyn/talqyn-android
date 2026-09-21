@@ -15,7 +15,7 @@ public data class TalqynListingWithFilters(
 )
 
 /**
- * Instant search, listings, and the filter panel.
+ * Instant search, the start screen, listings, and the filter panel.
  *
  * Requires the `search` scope, which every device token carries. Reached through
  * [Talqyn.search]. Every request inherits the client's defaults — locale, place, A/B

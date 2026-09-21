@@ -9,10 +9,10 @@ import kotlin.coroutines.cancellation.CancellationException
  *
  * Requires the `events` scope. Reached through [Talqyn.events].
  *
- * Not analytics for its own sake: the `history` block of an instant-search response and
- * the denominator of click-through are both assembled from these rows. The storefront
- * has to report them itself — by definition there is no backend of yours in the chain to
- * do it. An event is attributed to the shopper the device token names.
+ * Not analytics for its own sake: the denominator of click-through and the `history`
+ * blocks of instant search and of the start screen are all assembled from these rows. The
+ * storefront has to report them itself — by definition there is no backend of yours in the
+ * chain to do it. An event is attributed to the shopper the device token names.
  */
 public class TalqynEventsApi internal constructor(
     private val client: TalqynApiClient,
@@ -38,7 +38,10 @@ public class TalqynEventsApi internal constructor(
         )
     }
 
-    /** Reports a category tap in the navigation block: `POST /v1/events/category-click`. Use [track] to fire and forget. */
+    /**
+     * Reports a category tap — in a search response's navigation block or on the start
+     * screen: `POST /v1/events/category-click`. Use [track] to fire and forget.
+     */
     public suspend fun categoryClick(event: TalqynCategoryClickEvent) {
         client.sendWithoutResponse(
             path = "events/category-click",
