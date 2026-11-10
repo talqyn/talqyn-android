@@ -1,10 +1,11 @@
 package com.talqyn.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
@@ -14,13 +15,12 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -171,6 +171,9 @@ private fun TalqynProductDetails(product: TalqynProduct, style: TalqynCardStyle,
             text = product.title,
             style = (if (isRow) fonts.callout else fonts.caption).copy(color = if (isOutOfStock) colors.textTertiary else colors.textSecondary),
             maxLines = 2,
+            // A carousel's titles take two lines each, however long: the ratings and the prices
+            // then stand on one line along the row, whatever each tile says under its price.
+            minLines = if (style == TalqynCardStyle.Compact) 2 else 1,
             overflow = TextOverflow.Ellipsis,
         )
         TalqynRatingRow(product.rating, product.reviewsCount)
@@ -322,6 +325,68 @@ private fun TalqynCardPair(isAppCard: List<Boolean>, content: @Composable () -> 
     }
 }
 
+private val CAROUSEL_SPACING = 10.dp
+
+/**
+ * A carousel's tiles, side by side and one height: the SDK's tiles are stretched to the tallest
+ * of them, so a tile with a one-line title or without "out of stock" does not end short of its
+ * neighbour. An app's card stands at its own height, at the top of the row — it may be built of
+ * anything, and is not asked for its intrinsic size, for the reason [TalqynCardPair] gives.
+ *
+ * Not lazy, as the iOS row is not: a turn's carousel is a handful of products, and one height
+ * for the row needs every tile measured.
+ */
+@Composable
+private fun TalqynCarouselRow(products: List<TalqynProduct>, onProduct: (TalqynProduct) -> Unit) {
+    val margin = LocalTalqyn.current.metrics.horizontalMargin
+    val provider = LocalTalqynCardProvider.current
+    val appCards = remember(provider, products) { products.map { provider?.card(it, TalqynProductCardLayout.Vertical) } }
+    val tileWidth = compactCardWidth()
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState()),
+    ) {
+        Layout(
+            content = {
+                products.forEachIndexed { index, product ->
+                    key(product.talqynId) {
+                        TalqynResolvedProductCard(product, TalqynCardStyle.Compact, appCards[index], { onProduct(product) })
+                    }
+                }
+            },
+            modifier = Modifier.padding(horizontal = margin),
+        ) { measurables, constraints ->
+            val width = tileWidth.roundToPx()
+            val gap = CAROUSEL_SPACING.roundToPx()
+            val measured = arrayOfNulls<Placeable>(measurables.size)
+            var height = 0
+            measurables.forEachIndexed { index, measurable ->
+                val tileHeight = if (appCards.getOrNull(index) != null) {
+                    val placeable = measurable.measure(Constraints(maxHeight = constraints.maxHeight))
+                    measured[index] = placeable
+                    placeable.height
+                } else {
+                    measurable.minIntrinsicHeight(width)
+                }
+                height = maxOf(height, tileHeight)
+            }
+            height = constraints.constrainHeight(height)
+            val placeables = measurables.mapIndexed { index, measurable ->
+                measured[index] ?: measurable.measure(Constraints.fixed(width, height))
+            }
+            val rowWidth = placeables.sumOf { it.width } + gap * (placeables.size - 1).coerceAtLeast(0)
+            layout(rowWidth, height) {
+                var x = 0
+                placeables.forEach { placeable ->
+                    placeable.placeRelative(x, 0)
+                    x += placeable.width + gap
+                }
+            }
+        }
+    }
+}
+
 /**
  * Titled carousels: the products a turn found beyond the ones cited inline, one carousel per
  * group of a multi-step plan. A carousel starts at the transcript's margin, so its first card
@@ -339,15 +404,7 @@ internal fun TalqynProductSections(sections: List<TalqynProductSection>, onProdu
                     style = talqyn.fonts.captionBold.copy(color = talqyn.colors.textSecondary),
                     modifier = Modifier.padding(horizontal = margin),
                 )
-                LazyRow(
-                    contentPadding = PaddingValues(horizontal = margin),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    verticalAlignment = Alignment.Top,
-                ) {
-                    items(section.products, key = { it.talqynId }) { product ->
-                        TalqynProductCard(product, TalqynCardStyle.Compact, { onProduct(product) })
-                    }
-                }
+                TalqynCarouselRow(section.products, onProduct)
             }
         }
     }

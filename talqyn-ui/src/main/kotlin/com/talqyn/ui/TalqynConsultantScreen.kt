@@ -136,6 +136,12 @@ internal class TalqynConversationHolder(talqyn: Talqyn, maxFollowUps: Int) : Vie
  *   `conversation.reset()` and history is [TalqynChatHistoryScreen].
  * @param showsPoweredBy Whether the empty screen carries "Powered by Talqyn" under the examples.
  *   The wording is fixed, in every locale; this is the switch.
+ * @param showsHistory Whether the header offers chat history. Under `TalqynDeviceIdentity.Guest` it
+ *   never does, whatever this says: a guest has no history, and the button would open an error.
+ *   This is for the shopper who does have one — a persistent anonymous id keeps a history too —
+ *   and whom the app would rather not show it to: pass whether somebody is signed in. The screen
+ *   follows the value as it changes, and closes the history list when it turns `false`. It hides
+ *   the button only: what the server keeps follows the identity, not this flag.
  * @param navigation The way out drawn at the start of the header.
  * @param maxFollowUps How many follow-up prompts to offer under an answer. `0` shows none.
  * @param productCard The app's own product cards; `null` draws the SDK's.
@@ -156,6 +162,7 @@ public fun TalqynConsultantScreen(
     imageLoader: TalqynImageLoader = TalqynUrlImageLoader.Shared,
     showsHeader: Boolean = true,
     showsPoweredBy: Boolean = true,
+    showsHistory: Boolean = true,
     navigation: TalqynNavigation? = null,
     maxFollowUps: Int = TalqynConversationLimits.MAX_FOLLOW_UPS,
     productCard: TalqynProductCardProvider? = null,
@@ -175,6 +182,7 @@ public fun TalqynConsultantScreen(
         imageLoader = imageLoader,
         showsHeader = showsHeader,
         showsPoweredBy = showsPoweredBy,
+        showsHistory = showsHistory,
         navigation = navigation,
         productCard = productCard,
         onRate = onRate,
@@ -202,6 +210,7 @@ public fun TalqynConsultantScreen(
     imageLoader: TalqynImageLoader = TalqynUrlImageLoader.Shared,
     showsHeader: Boolean = true,
     showsPoweredBy: Boolean = true,
+    showsHistory: Boolean = true,
     navigation: TalqynNavigation? = null,
     productCard: TalqynProductCardProvider? = null,
     onRate: TalqynRatingListener? = null,
@@ -223,6 +232,7 @@ public fun TalqynConsultantScreen(
                 modifier = modifier,
                 showsHeader = showsHeader,
                 showsPoweredBy = showsPoweredBy,
+                offersHistory = showsHistory,
                 navigation = navigation,
                 onRate = onRate,
             )
@@ -250,6 +260,7 @@ private fun TalqynConsultantContent(
     modifier: Modifier,
     showsHeader: Boolean,
     showsPoweredBy: Boolean,
+    offersHistory: Boolean,
     navigation: TalqynNavigation?,
     onRate: TalqynRatingListener?,
 ) {
@@ -296,10 +307,11 @@ private fun TalqynConsultantContent(
             onRetry = conversation::retry,
             onRedirect = { openSearch(it) },
             onFilters = { filters, question -> applyFilters(filters.criteria(query = question)) },
-            onComparison = {
+            onComparison = { table, turnId ->
                 // The keyboard must not stay up for a composer the table covers.
                 focusManager.clearFocus()
-                presentation.comparison = it
+                presentation.comparisonTurnId = turnId
+                presentation.comparison = table
             },
             onSubmitClarify = { answer, turnId -> conversation.submitClarify(turnId, answer) },
             onClarifyDraft = { draft, turnId -> conversation.updateClarifyDraft(turnId, draft) },
@@ -378,10 +390,11 @@ private fun TalqynConsultantContent(
                 if (showsHeader) {
                     TalqynHeader(
                         navigation = navigation,
+                        showsHistory = offersHistory && state.keepsHistory,
                         showsNewChat = !state.isEmpty,
                         actionsEnabled = !state.isStreaming && !state.isRestoring,
                         onHistory = {
-                            if (!conversation.state.value.isStreaming) {
+                            if (offersHistory && conversation.state.value.keepsHistory && !conversation.state.value.isStreaming) {
                                 focusManager.clearFocus()
                                 presentation.showsHistory = true
                             }
@@ -514,7 +527,12 @@ private fun TalqynConsultantContent(
                 TalqynComparisonContent(
                     table = table,
                     products = state.productsById,
-                    onOpenProduct = { openProduct(it) },
+                    onOpenProduct = { product ->
+                        presentation.comparisonTurnId
+                            ?.let { conversation.state.value.assistantTurn(it) }
+                            ?.let { conversation.trackProductTap(product, it) }
+                        openProduct(product)
+                    },
                     onClose = { presentation.comparison = null },
                     modifier = Modifier.fillMaxSize(),
                 )
@@ -523,6 +541,9 @@ private fun TalqynConsultantContent(
 
         // History replaces the consultant rather than sliding over it: it is a screen of its own,
         // with its own header and close button, and it fades in where the consultant was.
+        LaunchedEffect(offersHistory, state.keepsHistory) {
+            if (!offersHistory || !state.keepsHistory) presentation.showsHistory = false
+        }
         AnimatedVisibility(visible = presentation.showsHistory, enter = fadeIn(tween(200)), exit = fadeOut(tween(200))) {
             TalqynChatHistoryContent(
                 talqyn = conversation.talqyn,

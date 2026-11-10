@@ -37,6 +37,9 @@ internal class TalqynScreenPresentation {
     /** The comparison open over the transcript. */
     var comparison: TalqynComparisonTable? by mutableStateOf(null)
 
+    /** The turn that proposed [comparison]: a product opened from the table is a click on that turn's product. */
+    var comparisonTurnId: UUID? = null
+
     /** Whether history is open over the transcript. */
     var showsHistory: Boolean by mutableStateOf(false)
 

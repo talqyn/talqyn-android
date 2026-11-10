@@ -1,15 +1,21 @@
 package com.talqyn.ui
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.selection.DisableSelection
 import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.key
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.dp
 import com.talqyn.consultant.TalqynAnswerBlock
 import com.talqyn.consultant.TalqynAnswerRating
@@ -28,7 +34,7 @@ internal class TalqynTurnActions(
     val onRetry: (UUID) -> Unit,
     val onRedirect: (String) -> Unit,
     val onFilters: (TalqynActionFilters, String) -> Unit,
-    val onComparison: (TalqynComparisonTable) -> Unit,
+    val onComparison: (TalqynComparisonTable, UUID) -> Unit,
     val onSubmitClarify: (String, UUID) -> Unit,
     val onClarifyDraft: (TalqynClarifyDraft, UUID) -> Unit,
     /** A turn's clarify draft as the conversation holds it at the moment of asking, rather than as last composed. */
@@ -37,6 +43,19 @@ internal class TalqynTurnActions(
     val onRate: (TalqynAnswerRating?, List<TalqynFeedbackReason>, UUID) -> Unit,
     val onEditQuestion: (String) -> Unit,
 )
+
+/**
+ * Brings what has just been composed in from transparent: for what appears on its own, under the
+ * shopper's eyes, rather than by their doing. With animations switched off in the system settings
+ * it is simply there.
+ */
+@Composable
+internal fun Modifier.talqynFadeIn(enabled: Boolean): Modifier {
+    if (!enabled) return this
+    val alpha = remember { Animatable(0f) }
+    LaunchedEffect(Unit) { alpha.animateTo(1f, tween(250)) }
+    return graphicsLayer { this.alpha = alpha.value }
+}
 
 /**
  * One assistant turn: status, the answer with inline product cards, the products carousel,
@@ -51,6 +70,10 @@ internal fun TalqynAssistantTurnView(row: TalqynTurnRow, actions: TalqynTurnActi
     val talqyn = LocalTalqyn.current
     val margin = talqyn.metrics.horizontalMargin
     val onProduct: (TalqynProduct) -> Unit = { actions.onProduct(it, row.turnId) }
+    val hasFollowUp = row.actions.isNotEmpty() || row.clarify != null || row.redirectQuery != null ||
+        row.notice != null || row.toolbar != null
+    val carouselArrives = remember(row.turnId) { row.productSections.isEmpty() }
+    val followUpArrives = remember(row.turnId) { !hasFollowUp }
 
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         if (row.stage != null || row.blocks.isNotEmpty()) {
@@ -78,20 +101,23 @@ internal fun TalqynAssistantTurnView(row: TalqynTurnRow, actions: TalqynTurnActi
         }
 
         if (row.productSections.isNotEmpty()) {
-            TalqynProductSections(row.productSections, onProduct)
+            Box(Modifier.talqynFadeIn(carouselArrives)) {
+                TalqynProductSections(row.productSections, onProduct)
+            }
         }
 
-        val hasFollowUp = row.actions.isNotEmpty() || row.clarify != null || row.redirectQuery != null ||
-            row.notice != null || row.toolbar != null
         if (hasFollowUp) {
-            Column(Modifier.padding(horizontal = margin), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(
+                Modifier.talqynFadeIn(followUpArrives).padding(horizontal = margin),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
                 row.actions.forEach { action ->
                     when (action) {
                         is TalqynTurnAction.Filters -> TalqynActionChip(talqyn.icons.filters, talqyn.strings.applyFilters, action.summary) {
                             actions.onFilters(action.filters, row.question)
                         }
                         is TalqynTurnAction.Comparison -> TalqynActionChip(talqyn.icons.comparison, talqyn.strings.openComparison, action.summary) {
-                            actions.onComparison(action.table)
+                            actions.onComparison(action.table, row.turnId)
                         }
                     }
                 }

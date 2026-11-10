@@ -8,16 +8,20 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
 import org.junit.Rule
 import org.junit.Test
@@ -30,6 +34,7 @@ import com.talqyn.consultant.TalqynConversation
 import com.talqyn.consultant.TalqynPriceFormatter
 import com.talqyn.consultant.TalqynUiStrings
 import com.talqyn.sdk.Talqyn
+import com.talqyn.sdk.TalqynDeviceIdentity
 import com.talqyn.sdk.TalqynHttpRequest
 import com.talqyn.sdk.TalqynHttpResponse
 import com.talqyn.sdk.TalqynHttpResult
@@ -102,6 +107,47 @@ class ConsultantScreenTests {
         }
     }
 
+    private fun historyButtons(): Int =
+        compose.onAllNodesWithContentDescription(strings.historyTitle).fetchSemanticsNodes().size
+
+    /** History is for a shopper the app knows. The app says when there is one, and may change its mind while the screen is up. */
+    @Test
+    fun historyIsOfferedOnlyWhileTheAppSaysSo() {
+        val talqyn = TestFixtures.client(StubTransport().apply { enqueueDeviceToken() })
+        runBlocking { talqyn.setIdentity(TalqynDeviceIdentity.PersistentAnonymous) }
+        var signedIn by mutableStateOf(false)
+        compose.setContent {
+            TalqynConsultantScreen(
+                talqyn = talqyn, strings = strings, showsHistory = signedIn,
+                onOpenProduct = {}, onOpenSearch = {}, onApplyFilters = {},
+            )
+        }
+        compose.waitForIdle()
+        assertEquals("signed out", 0, historyButtons())
+
+        signedIn = true
+        compose.waitForIdle()
+        assertEquals("signed in", 1, historyButtons())
+
+        signedIn = false
+        compose.waitForIdle()
+        assertEquals("signed out again", 0, historyButtons())
+    }
+
+    /** A guest has no history — the server refuses the list — so the button that would open an error is not there, and comes back with a shopper. */
+    @Test
+    fun aGuestIsNotOfferedHistory() {
+        val talqyn = TestFixtures.client(StubTransport().apply { enqueueDeviceToken() })
+        val screen = showScreen(talqyn) { true }
+        waitFor("a guest is still offered history") { compose.waitForIdle(); historyButtons() == 0 }
+
+        runBlocking {
+            talqyn.setIdentity(TalqynDeviceIdentity.PersistentAnonymous)
+            screen.conversation.refreshIdentity()
+        }
+        waitFor("history did not come back") { compose.waitForIdle(); historyButtons() == 1 }
+    }
+
     /** A product page opened over the screen mid-answer: the answer settles while the screen is gone, and its question comes up when the shopper is back. */
     @Test
     fun aQuestionThatCameWhileTheScreenWasAwayComesUpOnTheWayBack() {
@@ -166,6 +212,46 @@ class ConsultantScreenTests {
         assertNotNull("the chip opens the comparison", screen.presentation.comparison)
         compose.onNodeWithText(strings.comparisonTitle).assertExists()
         compose.onNodeWithText("Compared the two laptops").assertDoesNotExist()
+    }
+
+    /** A product opened from the comparison is a click on the turn's product like any other, and is reported like one. */
+    @Test
+    fun aProductOpenedFromTheComparisonIsReportedAsAClick() {
+        val transport = StubTransport().apply {
+            enqueueDeviceToken()
+            enqueueStream(
+                sse("delta", """{"text":"Compared the two laptops"}""") +
+                    sse("products", """{"items":[{"talqyn_id":1,"title":"Acer"},{"talqyn_id":2,"title":"Asus"}],"search_id":"srch-1"}""") +
+                    sse("action", """{"type":"show_comparison","table":{"talqyn_ids":[1,2],"titles":["Acer","Asus"],"rows":[{"label":"Screen","values":["15","14"]}]}}""") +
+                    sse("done", """{"session_id":"sess-1"}"""),
+            )
+            enqueue("", status = 204)
+        }
+        val opened = mutableListOf<Long>()
+        val talqyn = TestFixtures.client(transport)
+        var conversation: TalqynConversation? = null
+        compose.setContent {
+            val remembered = rememberTalqynConversation(talqyn)
+            conversation = remembered
+            TalqynConsultantScreen(
+                conversation = remembered, strings = strings,
+                onOpenProduct = { opened += it.talqynId }, onOpenSearch = {}, onApplyFilters = {},
+            )
+        }
+        compose.waitForIdle()
+
+        compose.runOnIdle { checkNotNull(conversation).send(question) }
+        waitFor("the comparison to be offered") { compose.onAllNodesWithText(strings.openComparison).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText(strings.openComparison).performSemanticsAction(SemanticsActions.OnClick)
+        compose.waitForIdle()
+        compose.onNodeWithContentDescription("Asus").performSemanticsAction(SemanticsActions.OnClick)
+        compose.waitForIdle()
+
+        assertEquals(listOf(2L), opened)
+        waitFor("the click to be reported") { transport.sent.any { it.url.toString().endsWith("/events/product-click") } }
+        val click = transport.sent.last { it.url.toString().endsWith("/events/product-click") }
+        val body = click.body?.toString(Charsets.UTF_8).orEmpty()
+        assertTrue(body, body.contains("\"talqyn_id\":2") && body.contains("srch-1"))
     }
 
     /** A dialog is a window of its own, composed under the system's font scale again: its content caps the type the way the screen does. */

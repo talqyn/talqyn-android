@@ -72,8 +72,15 @@ internal class StubTransport : TalqynHttpTransport {
 
     fun enqueueDeviceToken() = enqueue(TestFixtures.TOKEN)
 
+    /** What was asked for, in order. */
+    val sent: List<TalqynHttpRequest> get() = synchronized(lock) { recorded.toList() }
+    private val recorded = mutableListOf<TalqynHttpRequest>()
+
     override suspend fun send(request: TalqynHttpRequest): TalqynHttpResult =
-        synchronized(lock) { responses.removeFirstOrNull() } ?: throw IOException("stub response queue is empty")
+        synchronized(lock) {
+            recorded += request
+            responses.removeFirstOrNull()
+        } ?: throw IOException("stub response queue is empty")
 
     override suspend fun stream(request: TalqynHttpRequest): TalqynHttpStream {
         val lines = synchronized(lock) { streams.removeFirstOrNull() } ?: throw IOException("stub stream queue is empty")

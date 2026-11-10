@@ -57,6 +57,13 @@ public data class TalqynConversationState(
     val productsById: Map<Long, TalqynProduct> = emptyMap(),
     val restoreFailure: TalqynException? = null,
     val feedbackFailure: TalqynException? = null,
+    /**
+     * Whether the shopper the client acts as has a chat history: `false` under
+     * `TalqynDeviceIdentity.Guest`, whose conversations are kept for nobody and whose list of
+     * chats the server refuses. A screen offers history only while this is `true`. As of the last
+     * [TalqynConversation.refreshIdentity].
+     */
+    val keepsHistory: Boolean = true,
 ) {
     /** Whether the screen has nothing to show yet. */
     public val isEmpty: Boolean get() = turns.isEmpty()
@@ -581,9 +588,14 @@ public class TalqynConversation(
      * Compares the identity as the app set it, not the shopper id: the id reads as a local
      * UUID before the first token and as the server's form after it, and a screen coming back
      * from a product page must not mistake that for a different shopper.
+     *
+     * It also brings [TalqynConversationState.keepsHistory] up to date, so call it after
+     * `Talqyn.setIdentity` as well when the screen is already up.
      */
     public suspend fun refreshIdentity() {
         val current = talqyn.currentIdentity()
+        val keepsHistory = current != TalqynDeviceIdentity.Guest
+        mutableState.update { if (it.keepsHistory == keepsHistory) it else it.copy(keepsHistory = keepsHistory) }
         val previous = identitySnapshot
         if (previous == null) {
             identitySnapshot = current

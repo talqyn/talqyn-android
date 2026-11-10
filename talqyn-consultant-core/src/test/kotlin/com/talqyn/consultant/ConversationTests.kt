@@ -502,4 +502,18 @@ class ConversationTests {
         conversation.refreshIdentity()
         assertTrue("a new shopper starts clean", conversation.turns.isEmpty())
     }
+
+    /** A guest has no history — the server refuses the list — and the conversation says so, for a screen not to offer it. */
+    @Test
+    fun aGuestKeepsNoHistory() = mainTest {
+        val talqyn = TestFixtures.client(StubTransport(), credentials = TestFixtures.deviceToken(TalqynDeviceIdentity.Guest))
+        val conversation = TalqynConversation(talqyn, scope = TestMain.scope())
+
+        conversation.refreshIdentity()
+        assertFalse(conversation.state.value.keepsHistory)
+
+        talqyn.setIdentity(TalqynDeviceIdentity.User("5ebd09d144a7d1cac29db19d"))
+        conversation.refreshIdentity()
+        assertTrue(conversation.state.value.keepsHistory)
+    }
 }

@@ -14,7 +14,8 @@ consultant. Three modules, each added separately:
   activity, lifecycle, and core artifacts, which a Compose app has anyway.
 - **minSdk 26**, Kotlin 2.1 or newer; `talqyn-ui` asks what Compose 1.10 asks —
   compileSdk 35 and AGP 8.6. No R8 rules needed.
-- **Data safety in Google Play:** the SDK sends the shopper identifier (a UUID),
+- **Data safety in Google Play:** the SDK sends the shopper identifier (the id you pass,
+  or a random UUID for an anonymous shopper),
   search queries, product clicks, and questions to the consultant. Check it against
   what the app declares.
 - **Documented in place.** This README covers integration; every public type and
@@ -33,7 +34,7 @@ alone if all you need is search — see [Installation](#installation).
 
 ```kotlin
 // build.gradle.kts of the app's module
-implementation("com.talqyn:talqyn-ui:1.1.0")
+implementation("com.talqyn:talqyn-ui:1.2.0")
 ```
 
 **2. Make one client for the whole app** and warm it up at launch, so the first
@@ -94,9 +95,9 @@ among its repositories.
 ```kotlin
 // build.gradle.kts of the app's module
 dependencies {
-    implementation("com.talqyn:talqyn-sdk:1.1.0")
-    implementation("com.talqyn:talqyn-consultant-core:1.1.0") // a consultant screen of your own
-    implementation("com.talqyn:talqyn-ui:1.1.0")              // the ready-made screen; the core comes with it
+    implementation("com.talqyn:talqyn-sdk:1.2.0")
+    implementation("com.talqyn:talqyn-consultant-core:1.2.0") // a consultant screen of your own
+    implementation("com.talqyn:talqyn-ui:1.2.0")              // the ready-made screen; the core comes with it
 }
 ```
 
@@ -131,13 +132,18 @@ does not back up, so a restored backup does not hand the history to somebody els
 phone. When the shopper signs in or out, tell the client:
 
 ```kotlin
-talqyn.setIdentity(TalqynDeviceIdentity.User(accountUuid))    // signed in: history follows the account
+talqyn.setIdentity(TalqynDeviceIdentity.User(accountId))      // signed in: history follows the account
 talqyn.setIdentity(TalqynDeviceIdentity.PersistentAnonymous)  // back to this device's anonymous shopper
 talqyn.setIdentity(TalqynDeviceIdentity.Guest)                // no history is kept; the consultant still works
 ```
 
-For a signed-in shopper, pass the same UUID every time — the account's id from
-your backend, say. Skip the call when the account changes, and the next
+For a signed-in shopper, pass the same id every time — the account's id from
+your backend, in your own format: a `UUID`, or a `String` of 1 to 128 characters
+of `[A-Za-z0-9._:-]`. Nobody confirms this id, so a shopper's history is
+protected only by the id being impossible to guess, and that is yours to ensure:
+a random id (a UUID, an opaque account id) is fine, an enumerable one such as a
+CRM number lets anyone who substitutes it read another shopper's chats — map it
+to a random id first. Skip the call when the account changes, and the next
 conversation lands in the previous shopper's history.
 
 ### Defaults
@@ -453,6 +459,7 @@ What you can set:
 | `strings` | the en/ru/kk copy, any line replaceable: `TalqynUiStrings.En.copy(placeholder = "…")` |
 | `showsHeader` | `false` keeps your own app bar; "new conversation" is then `conversation.reset()`, and history is `TalqynChatHistoryScreen` |
 | `showsPoweredBy` | `false` removes "Powered by Talqyn" from the empty screen |
+| `showsHistory` | `false` removes the history button from the header — for a shopper who is not signed in. Pass state (`showsHistory = isSignedIn`); the screen follows it. Under `Guest` the button is hidden by itself: a guest has no history |
 | `priceFormatter` | `449 990 ₸` by default |
 | `imageLoader` | your app's image cache and pipeline — Coil, say — in place of the SDK's |
 | `conversation` | the second overload takes a conversation of your own — to put a question into the field (`conversation.updateDraft("…")`) or keep the transcript when the screen closes |

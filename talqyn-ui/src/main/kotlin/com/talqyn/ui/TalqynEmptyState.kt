@@ -117,6 +117,7 @@ internal fun TalqynEmptyState(showsPoweredBy: Boolean, onExample: (String) -> Un
 @Composable
 internal fun TalqynHeader(
     navigation: TalqynNavigation?,
+    showsHistory: Boolean,
     showsNewChat: Boolean,
     actionsEnabled: Boolean,
     onHistory: () -> Unit,
@@ -144,7 +145,9 @@ internal fun TalqynHeader(
                 when (navigation) {
                     is TalqynNavigation.Back -> HeaderButton(icons.back, colors.textPrimary, strings.back, enabled = true, onClick = navigation.onClick)
                     is TalqynNavigation.Close -> HeaderButton(icons.close, colors.textPrimary, strings.close, enabled = true, iconSize = 20.dp, onClick = navigation.onClick)
-                    null -> HeaderButton(icons.history, colors.textPrimary, strings.historyTitle, enabled = actionsEnabled, onClick = onHistory)
+                    null -> if (showsHistory) {
+                        HeaderButton(icons.history, colors.textPrimary, strings.historyTitle, enabled = actionsEnabled, onClick = onHistory)
+                    }
                 }
             }
             BasicText(
@@ -158,7 +161,7 @@ internal fun TalqynHeader(
                     .semantics { heading() },
             )
             Row(Modifier.align(Alignment.CenterEnd)) {
-                if (navigation != null) {
+                if (navigation != null && showsHistory) {
                     HeaderButton(icons.history, colors.textPrimary, strings.historyTitle, enabled = actionsEnabled, onClick = onHistory)
                 }
                 if (showsNewChat) {
