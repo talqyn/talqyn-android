@@ -3,7 +3,6 @@ package com.talqyn.sdk
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import java.time.Instant
-import java.util.Locale
 import java.util.UUID
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.math.abs
@@ -44,7 +43,7 @@ internal class TalqynDeviceTokenMinter(
         storefront: String,
         clientKeyId: String,
         clientSecret: String,
-        userId: UUID?,
+        userId: String?,
         clockOffsetMillis: Long = 0,
     ): Minted {
         if (clientKeyId.isEmpty() || clientSecret.isEmpty()) {
@@ -59,7 +58,7 @@ internal class TalqynDeviceTokenMinter(
         val body = TalqynJson.encodeToBytes(
             jsonObject {
                 put("storefront", storefront)
-                putIfNotNull("user_id", userId?.toString()?.lowercase(Locale.ROOT))
+                putIfNotNull("user_id", userId)
             },
         )
 

@@ -103,9 +103,9 @@ internal class TalqynDeviceTokenAuthorizer(
         }
     }
 
-    /** The server's canonical form is lowercase; the local fallback is lowercased too, so the value does not change casing once a token exists. */
+    /** The local fallback is in the form that goes on the wire — a UUID lowercased, as the server echoes it — so the value does not change once a token exists. */
     suspend fun currentUserId(): String? = mutex.withLock {
-        issued?.token?.userId ?: resolveUserId()?.toString()?.lowercase(Locale.ROOT)
+        issued?.token?.userId ?: resolveUserId()
     }
 
     /** Who the SDK acts as, as the app set it. */
@@ -275,10 +275,11 @@ internal class TalqynDeviceTokenAuthorizer(
         ?: fromStore { store.loadClockOffset()?.inWholeMilliseconds ?: 0L }.also { clockOffsetMillis = it }
 
     /** `PersistentAnonymous` generates the UUID on first use and stores it: without an id that survives a restart there is no chat history. */
-    private suspend fun resolveUserId(): UUID? = when (val identity = identity) {
+    private suspend fun resolveUserId(): String? = when (val identity = identity) {
         TalqynDeviceIdentity.Guest -> null
         is TalqynDeviceIdentity.User -> identity.id
-        TalqynDeviceIdentity.PersistentAnonymous -> fromStore { store.loadUserId() ?: UUID.randomUUID().also(store::saveUserId) }
+        TalqynDeviceIdentity.PersistentAnonymous ->
+            fromStore { store.loadUserId() ?: UUID.randomUUID().also(store::saveUserId) }.toString().lowercase(Locale.ROOT)
     }
 
     /**

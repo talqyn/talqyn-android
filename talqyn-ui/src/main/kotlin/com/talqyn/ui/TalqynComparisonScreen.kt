@@ -41,6 +41,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
@@ -52,6 +53,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.constrainHeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.max
 import kotlinx.coroutines.launch
@@ -185,49 +187,52 @@ internal fun TalqynComparisonContent(
             .talqynBlocksTouches()
             .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal)),
     ) {
-        Box(
-            Modifier
+        ComparisonHeaderBar(
+            modifier = Modifier
                 .fillMaxWidth()
                 .background(colors.surface)
                 .statusBarsPadding()
                 .height(56.dp),
-        ) {
-            if (model.hasDifferences) {
+            differences = if (model.hasDifferences) {
+                {
+                    BasicText(
+                        text = talqyn.strings.comparisonOnlyDifferences,
+                        style = talqyn.fonts.label.copy(color = if (onlyDifferences) colors.accent else colors.textSecondary),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier
+                            .padding(start = talqyn.metrics.horizontalMargin)
+                            .semantics { selected = onlyDifferences }
+                            .talqynPressable {
+                                onlyDifferences = !onlyDifferences
+                                scope.launch { vertical.scrollTo(0) }
+                            },
+                    )
+                }
+            } else {
+                null
+            },
+            title = {
                 BasicText(
-                    text = talqyn.strings.comparisonOnlyDifferences,
-                    style = talqyn.fonts.label.copy(color = if (onlyDifferences) colors.accent else colors.textSecondary),
+                    text = talqyn.strings.comparisonTitle,
+                    style = talqyn.fonts.headline.copy(color = colors.textPrimary, textAlign = TextAlign.Center),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier
-                        .align(Alignment.CenterStart)
-                        .padding(start = talqyn.metrics.horizontalMargin)
-                        .widthIn(max = 120.dp)
-                        .semantics { selected = onlyDifferences }
-                        .talqynPressable {
-                            onlyDifferences = !onlyDifferences
-                            scope.launch { vertical.scrollTo(0) }
-                        },
                 )
-            }
-            BasicText(
-                text = talqyn.strings.comparisonTitle,
-                style = talqyn.fonts.headline.copy(color = colors.textPrimary, textAlign = TextAlign.Center),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.align(Alignment.Center).widthIn(max = 160.dp),
-            )
-            Box(
-                contentAlignment = Alignment.Center,
-                modifier = Modifier
-                    .align(Alignment.CenterEnd)
-                    .padding(end = 6.dp)
-                    .size(44.dp)
-                    .semantics { contentDescription = talqyn.strings.close }
-                    .talqynPressable(onClick = onClose),
-            ) {
-                TalqynIconImage(talqyn.icons.close, tint = colors.textPrimary, size = 16.dp)
-            }
-        }
+            },
+            close = {
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier
+                        .padding(end = 6.dp)
+                        .size(44.dp)
+                        .semantics { contentDescription = talqyn.strings.close }
+                        .talqynPressable(onClick = onClose),
+                ) {
+                    TalqynIconImage(talqyn.icons.close, tint = colors.textPrimary, size = 16.dp)
+                }
+            },
+        )
         TalqynDivider()
 
         BoxWithConstraints(Modifier.fillMaxWidth().weight(1f)) {
@@ -283,6 +288,51 @@ internal fun TalqynComparisonContent(
                     }
                 }
             }
+        }
+    }
+}
+
+private val TitleMaxWidth: Dp = 160.dp
+private val TitleGap: Dp = 8.dp
+
+/**
+ * The comparison's bar: the "differences only" switch at the start, the title, the close button
+ * at the end.
+ *
+ * The switch is written out whole and the title gives way to it: a switch cut short ("Тек
+ * айырмашыл…") does not say what it switches. The title stands in the middle when there is room
+ * for both, moves aside when there is not, and is itself what gets cut last of all.
+ */
+@Composable
+private fun ComparisonHeaderBar(
+    differences: (@Composable () -> Unit)?,
+    title: @Composable () -> Unit,
+    close: @Composable () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Layout(
+        content = {
+            Box { differences?.invoke() }
+            Box { title() }
+            Box { close() }
+        },
+        modifier = modifier,
+    ) { measurables, constraints ->
+        val width = constraints.maxWidth
+        val gap = TitleGap.roundToPx()
+        val loose = constraints.copy(minWidth = 0, minHeight = 0)
+        val closeButton = measurables[2].measure(loose)
+        val switch = measurables[0].measure(loose.copy(maxWidth = (width - closeButton.width - gap).coerceAtLeast(0)))
+        val start = if (switch.width > 0) switch.width + gap else 0
+        val room = (width - closeButton.width - gap / 2 - start).coerceAtLeast(0)
+        val label = measurables[1].measure(loose.copy(maxWidth = minOf(TitleMaxWidth.roundToPx(), room)))
+        val height = constraints.constrainHeight(maxOf(switch.height, label.height, closeButton.height))
+        val centered = (width - label.width) / 2
+        val titleX = centered.coerceIn(start, (width - closeButton.width - gap / 2 - label.width).coerceAtLeast(start))
+        layout(width, height) {
+            switch.placeRelative(0, (height - switch.height) / 2)
+            label.placeRelative(titleX, (height - label.height) / 2)
+            closeButton.placeRelative(width - closeButton.width, (height - closeButton.height) / 2)
         }
     }
 }

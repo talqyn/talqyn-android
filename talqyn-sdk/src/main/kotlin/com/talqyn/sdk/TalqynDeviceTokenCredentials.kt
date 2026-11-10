@@ -1,5 +1,6 @@
 package com.talqyn.sdk
 
+import java.util.Locale
 import java.util.UUID
 
 /**
@@ -47,12 +48,13 @@ public data class TalqynDeviceTokenCredentials(
  * gets a history that reopens under the same id on the next launch. This is why
  * the id **must survive app restarts**.
  *
- * The server accepts UUIDs only. The id is asserted by the device and confirmed by
- * nobody, so being unguessable is the only thing protecting somebody else's
- * conversations: an enumerable id such as a CRM row number would expose other
- * shoppers' history by iteration. A CRM identifier therefore does not belong here —
- * if history has to follow a shopper across devices, map your own id to a stable
- * UUID on your backend and pass it through [User].
+ * A named shopper's id is yours, in your own format. It is asserted by the device
+ * and confirmed by nobody, so being unguessable is the only thing protecting
+ * somebody else's conversations — and choosing such an id is the storefront's
+ * responsibility. A random one (a UUID, an opaque account id) is fine; an
+ * enumerable one such as a CRM row number exposes other shoppers' history to
+ * anyone who substitutes it. If your account ids are enumerable, map each to a
+ * stable random id on your backend and pass that through [User].
  */
 public sealed interface TalqynDeviceIdentity {
     /** A guest token: no `user_id` is sent. The consultant works, no history is recorded. */
@@ -61,9 +63,37 @@ public sealed interface TalqynDeviceIdentity {
     /** A persistent anonymous UUID, generated on first use and kept in the configured [TalqynUserIdStore]. */
     public data object PersistentAnonymous : TalqynDeviceIdentity
 
-    /** An explicit shopper UUID, for example one handed out by your backend after sign-in. */
-    public data class User(val id: UUID) : TalqynDeviceIdentity {
+    /**
+     * An explicit shopper id, for example the account's id from your backend after
+     * sign-in: 1 to 128 characters of `[A-Za-z0-9._:-]`.
+     *
+     * A UUID is lowercased, as the server does, so that one account written two ways
+     * stays one shopper. Any other id is sent exactly as given and is case-sensitive.
+     *
+     * @throws TalqynException.InvalidConfiguration when the id has another form.
+     */
+    public class User(id: String) : TalqynDeviceIdentity {
+        /** The id as it goes on the wire. */
+        public val id: String = wireShopperId(id)
+            ?: throw TalqynException.InvalidConfiguration("a shopper id must be 1 to 128 characters of [A-Za-z0-9._:-]")
+
+        /** An explicit shopper id that is a UUID. */
+        public constructor(id: UUID) : this(id.toString())
+
+        override fun equals(other: Any?): Boolean = other is User && other.id == id
+
+        override fun hashCode(): Int = id.hashCode()
+
         /** The id stays out of logs: being unguessable is all that keeps this shopper's history theirs. */
         override fun toString(): String = "User(id=***)"
     }
+}
+
+private val shopperIdForm = Regex("^[A-Za-z0-9._:-]{1,128}$")
+
+/** The id as the server will store it, or `null` when the server would refuse it. */
+internal fun wireShopperId(raw: String): String? = when {
+    !shopperIdForm.matches(raw) -> null
+    parseCanonicalUuid(raw) != null -> raw.lowercase(Locale.ROOT)
+    else -> raw
 }

@@ -9,6 +9,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
@@ -97,6 +98,36 @@ class DeviceTokenTest {
 
         assertEquals(canonical, transport.sent[0].bodyJson["user_id"])
         assertEquals(canonical, talqyn.currentUserId())
+    }
+
+    /** The id is the storefront's own: an account id that is not a UUID goes out exactly as given. */
+    @Test
+    fun namedIdentityInTheStorefrontFormatIsSentAsItIs() = runBlocking {
+        val transport = StubTransport()
+        val identifier = "5ebd09d144a7d1cac29db19D"
+        transport.enqueueDeviceToken(userId = identifier)
+        transport.enqueue(emptySearch)
+
+        val talqyn = TestFixtures.client(credentials = TestFixtures.deviceToken(TalqynDeviceIdentity.User(identifier)), transport = transport)
+        talqyn.search.search("iphone")
+
+        assertEquals(identifier, transport.sent[0].bodyJson["user_id"])
+        assertEquals(identifier, talqyn.currentUserId())
+    }
+
+    @Test
+    fun aUuidNamesOneShopperHoweverItIsWritten() {
+        val identifier = UUID.randomUUID()
+        assertEquals(TalqynDeviceIdentity.User(identifier), TalqynDeviceIdentity.User(identifier.toString().uppercase(Locale.ROOT)))
+        assertNotEquals(TalqynDeviceIdentity.User("Buyer-9"), TalqynDeviceIdentity.User("buyer-9"))
+    }
+
+    /** An id the server would answer `422` to is refused where the app passes it. */
+    @Test
+    fun aMalformedUserIdIsRefused() {
+        for (malformed in listOf("", "buyer@example.com", "a b", "x".repeat(129))) {
+            assertThrows(TalqynException.InvalidConfiguration::class.java) { TalqynDeviceIdentity.User(malformed) }
+        }
     }
 
     /** The persistent anonymous id must survive a restart: chat history hangs on it. */

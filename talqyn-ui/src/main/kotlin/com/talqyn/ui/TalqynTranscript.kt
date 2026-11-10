@@ -13,6 +13,8 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -109,6 +111,8 @@ internal fun TalqynTranscript(
     val density = LocalDensity.current
     val listState = state.listState
     val currentRows by rememberUpdatedState(rows)
+    val drawnKeys = remember { arrayOf<Set<Any>>(emptySet()) }
+    SideEffect { drawnKeys[0] = rows.mapTo(HashSet()) { it.key } }
     val reservePx by rememberUpdatedState(with(density) { bottomReserve.roundToPx() })
 
     LaunchedEffect(anchor.id) {
@@ -122,6 +126,25 @@ internal fun TalqynTranscript(
             TalqynTranscriptAnchor.Bottom -> state.scrollToBottom(currentRows.size, animated = false)
             TalqynTranscriptAnchor.Keep -> Unit
         }
+    }
+
+    // The room under the transcript grows with the keyboard, which the composer rides. A shopper at
+    // the end of the transcript stays at its end: the last answer moves up with the keyboard rather
+    // than disappearing under it. One reading somewhere above is left where they are, and a pinned
+    // question keeps its own place. Where the end was is judged against the room as it was before:
+    // against the new one, the keyboard has already covered it. The room shrinking needs nothing —
+    // the list settles back onto its end by itself.
+    val currentReservePx = with(density) { bottomReserve.roundToPx() }
+    val previousReservePx = remember { intArrayOf(currentReservePx) }
+    LaunchedEffect(currentReservePx) {
+        val before = previousReservePx[0]
+        previousReservePx[0] = currentReservePx
+        if (currentReservePx <= before || state.anchoredKey != null) return@LaunchedEffect
+        val info = listState.layoutInfo
+        val lastRow = info.visibleItemsInfo.firstOrNull { it.index == info.totalItemsCount - 2 } ?: return@LaunchedEffect
+        val proximityPx = with(density) { BOTTOM_PROXIMITY.roundToPx() }
+        if (lastRow.offset + lastRow.size - (info.viewportEndOffset - before) > proximityPx) return@LaunchedEffect
+        scrollQuietly { state.scrollToBottom(currentRows.size, animated = false) }
     }
 
     // The pin lets go the moment the shopper drags.
@@ -211,7 +234,12 @@ internal fun TalqynTranscript(
                 when (row) {
                     is TalqynTranscriptRow.User -> TalqynUserBubble(row.text, actions.onEditQuestion)
                     is TalqynTranscriptRow.Assistant -> TalqynAssistantTurnView(row.row, actions)
-                    is TalqynTranscriptRow.Suggestions -> TalqynSuggestions(row.questions, actions.onSuggestion)
+                    is TalqynTranscriptRow.Suggestions -> {
+                        val arrives = remember {
+                            row.key !in drawnKeys[0] && rows.getOrNull(index - 1)?.key in drawnKeys[0]
+                        }
+                        Box(Modifier.talqynFadeIn(arrives)) { TalqynSuggestions(row.questions, actions.onSuggestion) }
+                    }
                 }
             }
         }
